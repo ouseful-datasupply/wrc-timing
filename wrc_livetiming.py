@@ -928,7 +928,7 @@ def cli_metadata(year, name, stages):
 @click.argument('name')
 @click.argument('stages', nargs=-1)
 def cli_getOne(year, dbname, name, stages):
-    ''' Get one or more stages. '''
+    ''' Get one or more stages. Enter stage names in form: SS1 SS2  '''
     global url_base
     
     if not name:
