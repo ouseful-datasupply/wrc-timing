@@ -915,7 +915,7 @@ def cli_showrallies(year):
 
 @click.command()
 def cli_metadata(year, name, stages):
-    ''' Get one or more stages. '''
+    ''' Refresh WRC metadata in database. '''
     conn = setup_db(dbname)
 
     display('\nUpdating metadata...')
