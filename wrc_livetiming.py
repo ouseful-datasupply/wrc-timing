@@ -732,6 +732,15 @@ def dbfy(conn, df, table, if_exists='upsert', index=False, clear=False, **kwargs
         clear=True
         if_exists='append'
     if clear: cleardbtable(conn, table)
+        
+    #Get columns  
+    q="PRAGMA table_info({})".format(table)
+    cols = pd.read_sql(q,conn)['name'].tolist()
+    for c in df.columns:
+        if c not in cols:
+            print('Hmmm... column name `{}` appears in data but not {} table def?'.format(c,table ))
+            df.drop(columns=[c], inplace=True)
+
     if if_exists=='upsert':
         DB = Database(conn)
         DB[table].upsert_all(df.to_dict(orient='records'))
