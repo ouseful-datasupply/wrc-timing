@@ -949,7 +949,7 @@ def cli_getOne(year, dbname, name, stages):
                 display('\nGetting data for {} {} stage {}'.format(name, year, stage))
                 get_one(name, stage, dbname=dbname, year=year)
         except:
-            display('Hmm... something went wrong...\nCheck rally name by running: wrc_rallies {}'.format(year))
+            display('Hmm... something went wrong...\nCheck rally name by running: wrc_rallies --year {}'.format(year))
             # TO DO - also check stages? Can we get a stage list?
 
 
@@ -969,7 +969,7 @@ def cli_getAll(year, dbname, name):
             display('\nGetting data for all stages of {} {}'.format(name, year))
             get_all(name, dbname=dbname, year=year )
         except:
-            display('\nHmm... something went wrong...\nCheck rally name by running: wrc_rallies {}'.format(year))
+            display('\nHmm... something went wrong...\nCheck rally name by running: wrc_rallies --year {}'.format(year))
             # TO DO - also check stages? Can we get a stage list?
 
 @click.command()
