@@ -732,6 +732,15 @@ def dbfy(conn, df, table, if_exists='upsert', index=False, clear=False, **kwargs
         clear=True
         if_exists='append'
     if clear: cleardbtable(conn, table)
+        
+    #Get columns  
+    q="PRAGMA table_info({})".format(table)
+    cols = pd.read_sql(q,conn)['name'].tolist()
+    for c in df.columns:
+        if c not in cols:
+            print('Hmmm... column name `{}` appears in data but not {} table def?'.format(c,table ))
+            df.drop(columns=[c], inplace=True)
+
     if if_exists=='upsert':
         DB = Database(conn)
         DB[table].upsert_all(df.to_dict(orient='records'))
@@ -940,7 +949,7 @@ def cli_getOne(year, dbname, name, stages):
                 display('\nGetting data for {} {} stage {}'.format(name, year, stage))
                 get_one(name, stage, dbname=dbname, year=year)
         except:
-            display('Hmm... something went wrong...\nCheck rally name by running: wrc_rallies {}'.format(year))
+            display('Hmm... something went wrong...\nCheck rally name by running: wrc_rallies --year {}'.format(year))
             # TO DO - also check stages? Can we get a stage list?
 
 
@@ -960,7 +969,7 @@ def cli_getAll(year, dbname, name):
             display('\nGetting data for all stages of {} {}'.format(name, year))
             get_all(name, dbname=dbname, year=year )
         except:
-            display('\nHmm... something went wrong...\nCheck rally name by running: wrc_rallies {}'.format(year))
+            display('\nHmm... something went wrong...\nCheck rally name by running: wrc_rallies --year {}'.format(year))
             # TO DO - also check stages? Can we get a stage list?
 
 @click.command()
