@@ -589,7 +589,7 @@ def _stage_iterator(meta, stub, stage=None):
     #If stage is None get data for all stages
     if stage=='':
         stages=[]
-    elif stage and stage != meta['stages']:
+    elif stage:
         stages=[]
         #If we have a single stage (specified in form SS4) get it
         if isinstance(stage,str) and stage in meta['_stages']:
@@ -911,6 +911,8 @@ def get_championship(dbname='wrc19_test1.db', year=YEAR):
     save_championship(conn, year=year)
 
 #Geo:
+#What is df_rallydata?
+#ALso TO DO: bring in a grabber for the live timing and SQLise that...
 def get_kml_slugs(df_rallydata):
     return df_rallydata['kmlfile'].unique().tolist()
 
