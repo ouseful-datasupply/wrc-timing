@@ -587,13 +587,15 @@ def _stage_iterator(meta, stub, stage=None):
     meta2={'rallyId':meta['rallyId']}
     df = pd.DataFrame()
     #If stage is None get data for all stages
-    if stage is not None:
+    if stage=='':
+        stages=[]
+    elif stage and stage != meta['stages']:
         stages=[]
         #If we have a single stage (specified in form SS4) get it
         if isinstance(stage,str) and stage in meta['_stages']:
             stages.append(meta['_stages'][stage]['stageId'])
         #If we have a list of stages (in form ['SS4','SS5']) get them all
-        elif isinstance(stage, list):
+        elif isinstance(stage, list) or isinstance(stage, tuple):
             for _stage in stage:
                 if isinstance(_stage,str) and _stage in meta['_stages']:
                     stages.append(meta['_stages'][_stage]['stageId'])
@@ -601,8 +603,12 @@ def _stage_iterator(meta, stub, stage=None):
                     stages.append(_stage)
     else:
         stages = meta['stages']
-        
+
     #Get data for required stages
+    #A stage is required if:
+    # - it is running;
+    # - it is not ToRun and it is not in the database;
+    print('Grabbing', stages)
     for stageId in stages:
         _df = _single_stage(meta2, stub, stageId)
         df = pd.concat([df, _df], sort=False)
@@ -747,7 +753,29 @@ def dbfy(conn, df, table, if_exists='upsert', index=False, clear=False, **kwargs
     else:
         df.to_sql(table,conn,if_exists=if_exists,index=index)
 
-def setup_db(dbname, newdb=False):
+def save_itinerary(meta, conn):
+    itinerary_event, itinerary_legs, itinerary_sections, \
+    itinerary_stages, itinerary_controls = getItinerary(meta)
+
+    dbfy(conn, itinerary_event, 'itinerary_event', if_exists='replace')
+    dbfy(conn, itinerary_legs, 'itinerary_legs', if_exists='replace')
+    dbfy(conn, itinerary_sections, 'itinerary_sections', if_exists='replace')
+    dbfy(conn, itinerary_stages, 'itinerary_stages', if_exists='replace')
+    dbfy(conn, itinerary_controls, 'itinerary_controls', if_exists='replace')
+
+def _save_rally_base(meta, conn):
+    display('Getting base info...')
+
+    roster = getRoster(meta)
+    dbfy(conn, roster, 'roster', if_exists='replace')
+
+    startlists, startlist_classes = get_startlists(meta)
+    dbfy(conn, startlists, 'startlists', if_exists='replace')
+    dbfy(conn, startlist_classes, 'startlist_classes', if_exists='replace')
+
+    save_itinerary(meta, conn)
+
+def setup_db(dbname, meta, newdb=False):
     ''' Setup a database, if required, and return a connection. '''
     #In some situations, we may want a fresh start
     if os.path.isfile(dbname) and newdb:
@@ -766,32 +794,21 @@ def setup_db(dbname, newdb=False):
         c.executescript(SETUP_Q)
         c.executescript(SETUP_VIEWS_Q)
 
-    #Populate the database with event metadata
-    #The upsert breaks with the - and space chars in column names
-    dbfy(conn, getEventMetadata(), 'event_metadata', if_exists='replace')
+        #Populate the database with event metadata
+        dbfy(conn, getEventMetadata(), 'event_metadata', if_exists='replace')
+
+        #Save the entry list, initial itinerary etc
+        _save_rally_base(meta, conn)
+
     return conn
 
+
 #Grabbers
-def save_rally(meta, conn, stage=None):
-    ''' Save all tables associated with a particular rally. '''
-    
-    if stage is None:
-        display('Getting base info...')
-        roster = getRoster(meta)
-        dbfy(conn, roster, 'roster', if_exists='replace')
-
-        itinerary_event, itinerary_legs, itinerary_sections, \
-        itinerary_stages, itinerary_controls = getItinerary(meta)
-
-        dbfy(conn, itinerary_event, 'itinerary_event', if_exists='replace')
-        dbfy(conn, itinerary_legs, 'itinerary_legs', if_exists='replace')
-        dbfy(conn, itinerary_sections, 'itinerary_sections', if_exists='replace')
-        dbfy(conn, itinerary_stages, 'itinerary_stages', if_exists='replace')
-        dbfy(conn, itinerary_controls, 'itinerary_controls', if_exists='replace')
-
-        startlists, startlist_classes = get_startlists(meta)
-        dbfy(conn, startlists, 'startlists', if_exists='replace')
-        dbfy(conn, startlist_classes, 'startlist_classes', if_exists='replace')
+def save_rally(meta, conn, stage=None, stagetimes=True):
+    ''' Save all tables associated with a particular rally.
+        We can just get penalties and retirements by 
+          setting stagetimes=False.
+    '''
 
     #These need to be upserted
     display('Getting penalties...')
@@ -802,25 +819,26 @@ def save_rally(meta, conn, stage=None):
     retirements = get_retirements(meta)
     dbfy(conn, retirements, 'retirements')
 
-    display('Getting stagewinners...')
-    stagewinners = get_stagewinners(meta)
-    dbfy(conn, stagewinners, 'stagewinners')
+    if stagetimes:
+      display('Getting stagewinners...')
+      stagewinners = get_stagewinners(meta)
+      dbfy(conn, stagewinners, 'stagewinners')
 
-    display('Getting stage_overall...')
-    stage_overall = get_overall(meta, stage)
-    dbfy(conn, stage_overall, 'stage_overall')
+      display('Getting stage_overall...')
+      stage_overall = get_overall(meta, stage)
+      dbfy(conn, stage_overall, 'stage_overall')
 
-    display('Getting split_times...')
-    split_times = get_splitTimes(meta, stage)
-    dbfy(conn, split_times, 'split_times')
-    
-    display('Getting stage_times_stage...')
-    stage_times_stage = get_stage_times_stage(meta, stage)
-    dbfy(conn, stage_times_stage, 'stage_times_stage')
-    
-    display('Getting stage_times_overall...')
-    stage_times_overall = get_stage_times_overall(meta, stage)
-    dbfy(conn, stage_times_overall, 'stage_times_overall')
+      display('Getting split_times...')
+      split_times = get_splitTimes(meta, stage)
+      dbfy(conn, split_times, 'split_times')
+      
+      display('Getting stage_times_stage...')
+      stage_times_stage = get_stage_times_stage(meta, stage)
+      dbfy(conn, stage_times_stage, 'stage_times_stage')
+      
+      display('Getting stage_times_overall...')
+      stage_times_overall = get_stage_times_overall(meta, stage)
+      dbfy(conn, stage_times_overall, 'stage_times_overall')
 
     
 def save_championship(conn, year=YEAR):
@@ -843,25 +861,46 @@ def save_championship(conn, year=YEAR):
     dbfy(conn, championship_rounds, 'championship_rounds', if_exists='replace')
     # TO DO - uosert error if column name contains a .
     dbfy(conn, championship_events, 'championship_events', if_exists='replace')
-
-def get_one(rally, stage, dbname='wrc19_test1.db', year=YEAR):
-    #conn = sqlite3.connect(dbname)
-    conn = setup_db(dbname)
+    
+def get(rally, dbname='wrc19_test1.db', year=YEAR, running=False, stage=None, defaultstages='run', championship=False):
+    ''' defaultstages: all | notrun '''
+    
     meta =  set_rallyId2(rally, year)
-    getItinerary(meta) #to update meta
-    #display(meta)
-    display('Getting data for {}'.format('stage {}'.format(stage) if stage is not None else 'all stages'))
-    save_rally(meta, conn, stage)
-    
-def get_all(rally, dbname='wrc19_test1.db', year=YEAR):
-    
-    #conn = sqlite3.connect(dbname)
-    conn = setup_db(dbname)
 
-    meta =  set_rallyId2(rally, year)
+    #conn = sqlite3.connect(dbname)
+    conn = setup_db(dbname, meta)
+
+    #This is duplicated if we set up a new db...
+    #The save_itinerary step also calls the itinerary and updates meta
+    save_itinerary(meta, conn)
+
+    #We can ignore stages that are ToRun - we can ignore this if we want to forceall
+    meta['torun'] = pd.read_sql('SELECT code FROM itinerary_stages WHERE status="ToRun"',conn)['code'].to_list()
+  
+    #We can limit ourselves to just grabbing running stages
+    if running:
+      running_stages = pd.read_sql('SELECT code FROM itinerary_stages WHERE status="Running"',conn)['code'].to_list()
+      stage = [s for s in stage if s in running_stages ]
+      print('Getting data for any running stages:', stage)
+
+    #Omit stages that are torun
+    print(defaultstages, stage, meta['torun'])
+    if defaultstages=='run':
+      stage = [s for s in stage if s not in meta['torun']]
+    elif defaultstages=='all':
+      #This plays on the default behaviour of save_rally()
+      stage = None
+      #stage = [s for s in meta['_stages']]
+
+    if stage == []:
+        #There are no stages so we force no stages
+        stage = ''
     
-    save_rally(meta, conn)
-    save_championship(conn, year=year)
+    save_rally(meta, conn, stage=stage)
+
+    #Do we need to save chanpionship here?
+    if championship:
+      save_championship(conn, year=year)
     
 def get_championship(dbname='wrc19_test1.db', year=YEAR):
     #Should we really use or pass in a conn in to a db
@@ -929,15 +968,17 @@ def cli_metadata(year, name, stages):
 
     display('\nUpdating metadata...')
     dbfy(conn, getEventMetadata(), 'event_metadata', if_exists='replace')
- 
 
 @click.command()
 @click.option('--year',default=datetime.datetime.now().year,help='Year results are required for (defaults to current year)')
 @click.option('--dbname', default='wrc_timing.db',  help='SQLite database name')
+@click.option('--running', is_flag=True, help='Only grab stages that are running')
+@click.option('--championship', is_flag=True, help='Grab championship tables too')
+@click.option('--default-stages', default=('run'), type=click.Choice(["all", "run"]),  help='If no stages specified, which do we grab?')
 @click.argument('name')
 @click.argument('stages', nargs=-1)
-def cli_getOne(year, dbname, name, stages):
-    ''' Get one or more stages. Enter stage names in form: SS1 SS2  '''
+def cli_get(year, dbname, running, championship, default_stages, name, stages):
+    ''' Get stages for a given rally. '''
     global url_base
     
     if not name:
@@ -945,31 +986,10 @@ def cli_getOne(year, dbname, name, stages):
     else:
         url_base = url_base.format(SASEVENTID=getEventID(year)[name])
         try:
-            for stage in stages:
-                display('\nGetting data for {} {} stage {}'.format(name, year, stage))
-                get_one(name, stage, dbname=dbname, year=year)
+            display('\nGetting data for stages of {} {}: {}'.format(name, year, stages))
+            get(name, dbname=dbname, year=year, running=running, stage=stages, defaultstages=default_stages, championship=championship )
         except:
-            display('Hmm... something went wrong...\nCheck rally name by running: wrc_rallies --year {}'.format(year))
-            # TO DO - also check stages? Can we get a stage list?
-
-
-@click.command()
-@click.option('--year',default=datetime.datetime.now().year,help='Year results are required for (defaults to current year)')
-@click.option('--dbname', default='wrc_timing.db',  help='SQLite database name')
-@click.argument('name')
-def cli_getAll(year, dbname, name):
-    ''' Get all stages for a given rally. '''
-    global url_base
-    
-    if not name:
-        display('Which rally? To see available rallies, run: wrc_rallies')
-    else:
-        url_base = url_base.format(SASEVENTID=getEventID(year)[name])
-        try:
-            display('\nGetting data for all stages of {} {}'.format(name, year))
-            get_all(name, dbname=dbname, year=year )
-        except:
-            display('\nHmm... something went wrong...\nCheck rally name by running: wrc_rallies --year {}'.format(year))
+            display('\nHmm... something went wrong in get...\nCheck rally name by running: wrc_rallies --year {}'.format(year))
             # TO DO - also check stages? Can we get a stage list?
 
 @click.command()
@@ -987,7 +1007,7 @@ def cli_fullRun(year, dbname, name):
         try:
             for name in listRallies2():
                 display('Trying to get data for {}, {}'.format(name, year))
-                get_all(name, dbname=dbname, year=year )
+                get(name, dbname=dbname, year=year )
         except:
             display('Hmm... something went wrong...\nCheck rally name by running: wrc_rallies {}'.format(year))
             # TO DO - also check stages? Can we get a stage list?

@@ -23,27 +23,19 @@ Options:
 
 ```
 
-```
-Usage: wrc_get_stage [OPTIONS] NAME [STAGES]...
-
-  Get one or more stages.
-
-Options:
-  --year INTEGER  Year results are required for (defaults to current year)
-  --dbname TEXT   SQLite database name
-  --help          Show this message and exit.
-  ```
- 
   
-  ```
-  Usage: wrc_get_all [OPTIONS] NAME
+```
+Usage: wrc_get [OPTIONS] NAME [STAGES]...
 
-  Get all stages for a given rally.
+  Get stages for a given rally.
 
 Options:
-  --year INTEGER  Year results are required for (defaults to current year)
-  --dbname TEXT   SQLite database name
-  --help          Show this message and exit.
+  --year INTEGER         Year results are required for (defaults to current
+                         year)
+  --dbname TEXT          SQLite database name
+  --running              Only grab stages that are running
+  --default-stages TEXT  If no stages specified, which do we grab?
+  --help                 Show this message and exit.
   ```
   
   
