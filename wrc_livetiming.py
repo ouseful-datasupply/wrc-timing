@@ -469,6 +469,8 @@ def set_rallyId2(rally, year=YEAR, rallyIDs=None):
     if rally in rallyIDs:
         meta['rallyId']=rallyIDs[rally]
         meta['rally_name'] = rally
+        #We're calling event metadata twice; tidy this up...
+        meta['event_meta']= getEventMetadata().set_index('sas-rallyid').loc[meta['rallyId'],:].to_dict()
     return meta
 
 
@@ -763,6 +765,57 @@ def save_itinerary(meta, conn):
     dbfy(conn, itinerary_stages, 'itinerary_stages', if_exists='replace')
     dbfy(conn, itinerary_controls, 'itinerary_controls', if_exists='replace')
 
+
+#Geo:
+#What is df_rallydata?
+#ALso TO DO: bring in a grabber for the live timing and SQLise that...
+
+def get_kml_slug(meta):
+    return meta['kmlfile'].unique().tolist()
+    
+def get_kml_slugs(df):
+    return df['kmlfile'].unique().tolist()
+
+def get_kml_file(kml_slug, outdirname='maps'):
+    kmlurl = 'https://webappsdata.wrc.com/web/obc/kml/{}.xml'.format(kml_slug)
+    r=requests.get(kmlurl)  
+    with open("{}/{}.xml".format(outdirname,kml_slug), 'wb') as f:
+        f.write(r.content)
+        
+def kml_to_json(kml_slug,indirname='maps', outdirname='geojson'):
+    kml2geojson.main.convert('{}/{}.xml'.format(indirname,kml_slug),outdirname)
+    
+def kml_processor(o, indirname='maps',outdirname='geojson'):
+    dirnames = [indirname, outdirname]
+    for dirname in dirnames:
+      if not os.path.exists(dirname):
+        os.makedirs(dirname)
+    if isinstance(o,dict):
+      slugs = [o['kmlfile']]
+    else:
+      slugs = get_kml_slugs(o)
+    for kml_slug in slugs:
+        get_kml_file(kml_slug)
+        kml_to_json(kml_slug,indirname,outdirname)
+
+
+#TO DO: add to database
+#get_kml_file('montecarlo_2019')
+#kml_to_json('montecarlo_2019','maps/','maps/')
+# We should also look at storing the data as geo object in geospatialite
+
+def get_map_stages(gj):
+    gff=[]
+    for gf in gj['features']:
+        #Handle SS 1/2 as SS1-2
+        gf['properties']['name'] = gf['properties']['name'].replace('/','-').replace(' ','').strip()
+        display(gf['properties']['name'])
+        gff.append({'type': 'FeatureCollection',
+     'features': [gf]})
+    return gff
+
+
+
 def _save_rally_base(meta, conn):
     display('Getting base info...')
 
@@ -797,10 +850,14 @@ def setup_db(dbname, meta, newdb=False):
         #Populate the database with event metadata
         dbfy(conn, getEventMetadata(), 'event_metadata', if_exists='replace')
 
+        #Get geo bits
+        kml_processor(meta['event_meta'])
+        
         #Save the entry list, initial itinerary etc
         _save_rally_base(meta, conn)
 
     return conn
+
 
 
 #Grabbers
@@ -865,6 +922,7 @@ def save_championship(conn, year=YEAR):
 def get(rally, dbname='wrc19_test1.db', year=YEAR, running=False, stage=None, defaultstages='run', championship=False):
     ''' defaultstages: all | notrun '''
     
+    #Should we go wholesale and just use even metadata?
     meta =  set_rallyId2(rally, year)
 
     #conn = sqlite3.connect(dbname)
@@ -910,41 +968,7 @@ def get_championship(dbname='wrc19_test1.db', year=YEAR):
     display('Grabbing championship data tables for {}'.format(year))
     save_championship(conn, year=year)
 
-#Geo:
-#What is df_rallydata?
-#ALso TO DO: bring in a grabber for the live timing and SQLise that...
-def get_kml_slugs(df_rallydata):
-    return df_rallydata['kmlfile'].unique().tolist()
 
-def get_kml_file(kml_slug, outdirname='maps'):
-    kmlurl = 'https://webappsdata.wrc.com/web/obc/kml/{}.xml'.format(kml_slug)
-    r=requests.get(kmlurl)  
-    with open("{}/{}.xml".format(outdirname,kml_slug), 'wb') as f:
-        f.write(r.content)
-        
-def kml_to_json(kml_slug,indirname='maps', outdirname='geojson'):
-    kml2geojson.main.convert('{}/{}.xml'.format(indirname,kml_slug),outdirname)
-    
-def kml_processor(df_rallydata, indirname='maps',outdirname='geojson'):
-    if not os.path.exists(dirname):
-        os.makedirs(dirname)
-    for kml_slug in get_kml_slugs(df_rallydata):
-        get_kml_file(kml_slug)
-        kml_to_json(kml_slug,indirname,outdirname)
-
-def get_map_stages(gj):
-    gff=[]
-    for gf in gj['features']:
-        #Handle SS 1/2 as SS1-2
-        gf['properties']['name'] = gf['properties']['name'].replace('/','-').replace(' ','').strip()
-        display(gf['properties']['name'])
-        gff.append({'type': 'FeatureCollection',
-     'features': [gf]})
-    return gff
-
-#TO DO: add to database
-#get_kml_file('montecarlo_2019')
-#kml_to_json('montecarlo_2019','maps/','maps/')
 
 #Checks...
 #q="SELECT name FROM sqlite_master WHERE type = 'table';"
