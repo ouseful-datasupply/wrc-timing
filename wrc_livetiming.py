@@ -1018,39 +1018,34 @@ def cli_metadata(year, name, stages):
 @click.argument('name')
 @click.argument('stages', nargs=-1)
 def cli_get(year, dbname, running, championship, default_stages, name, stages):
-    ''' Get stages for a given rally. '''
-    global url_base
-    
-    if not name:
-        display('Which rally? To see available rallies, run: wrc_rallies')
-    else:
-        url_base = url_base.format(SASEVENTID=getEventID(year)[name])
-        try:
-            display('\nGetting data for stages of {} {}: {}'.format(name, year, defaultstages))
-            get(name, dbname=dbname, year=year, running=running, stage=stages, defaultstages=default_stages, championship=championship )
-        except:
-            display('\nHmm... something went wrong in get...\nCheck rally name by running: wrc_rallies --year {}'.format(year))
-            # TO DO - also check stages? Can we get a stage list?
+  ''' Get stages for a given rally. '''
+  if not name:
+    display('Which rally? To see available rallies, run: wrc_rallies')
+  else:
+    try:
+      display('\nGetting data for stages of {} {}: {}'.format(name, year, defaultstages))
+      get(name, dbname=dbname, year=year, running=running, stage=stages, defaultstages=default_stages, championship=championship )
+    except:
+      display('\nHmm... something went wrong in get...\nCheck rally name by running: wrc_rallies --year {}'.format(year))
+      # TO DO - also check stages? Can we get a stage list?
 
 @click.command()
 @click.option('--year',default=datetime.datetime.now().year,help='Year results are required for (defaults to current year)')
 @click.option('--dbname', default='wrc_timing.db',  help='SQLite database name')
 @click.argument('name')
 def cli_fullRun(year, dbname, name):
-    ''' Get all data for all rallies in a year. '''
-    global url_base
-    
-    if not name:
+  ''' Get all data for all rallies in a year. '''
+
+  if not name:
         display('Which rally? To see available rallies, run: wrc_rallies')
-    else:
-        url_base = url_base.format(SASEVENTID=getEventID(year)[name])
-        try:
-            for name in listRallies2():
-                display('Trying to get data for {}, {}'.format(name, year))
-                get(name, dbname=dbname, year=year )
-        except:
-            display('Hmm... something went wrong...\nCheck rally name by running: wrc_rallies {}'.format(year))
-            # TO DO - also check stages? Can we get a stage list?
+  else:
+      try:
+          for name in listRallies():
+              display('Trying to get data for {}, {}'.format(name, year))
+              get(name, dbname=dbname, year=year )
+      except:
+          display('Hmm... something went wrong...\nCheck rally name by running: wrc_rallies {}'.format(year))
+          # TO DO - also check stages? Can we get a stage list?
 
 @click.command()
 @click.option('--year',default=datetime.datetime.now().year,help='Year results are required for (defaults to current year)')
