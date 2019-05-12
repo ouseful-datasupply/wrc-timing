@@ -448,27 +448,33 @@ def getEventMetadata():
 
 
 # TO DO - this all got out of hand; need to tidy up
-def _getRallyIDs2(year=YEAR):
-    em=getEventMetadata()
-    em = em[em['year']==year][['name','sas-rallyid', 'sas-eventid', 'kmlfile', 'date-start']].reset_index(drop=True).dropna()
-    em['stub']=em['kmlfile'].apply(lambda x: x.split('_')[0])
-    return em
+def _getRallyMeta(year=YEAR):
+    if year not in meta['rallies_metadata']:
+      em= getEventMetadata()
+      em = em[em['year']==year][['name','sas-rallyid', 'sas-eventid', 'kmlfile', 'date-start']].reset_index(drop=True).dropna()
+      em['stub']=em['kmlfile'].apply(lambda x: x.split('_')[0])
+      meta['rallies_metadata'][year] = em.set_index('stub').to_dict(orient='index')
+    return meta['rallies_metadata'][year]
 
-def getRallyIDs2(year=YEAR):
-    em = _getRallyIDs2(year=year)
-    return em[['stub','sas-rallyid']].set_index('stub').to_dict()['sas-rallyid']
+def getRallyIDs(year=YEAR):
+    em = _getRallyMeta(year=year)
+    return {k:em[k]['sas-rallyid'] for k in em}
+    #return em[['stub','sas-rallyid']].set_index('stub').to_dict()['sas-rallyid']
 
-def getEventID(year=YEAR):
-    em = _getRallyIDs2(year=year)
-    return em[['stub','sas-eventid']].set_index('stub').to_dict()['sas-eventid']
+def getEventIDs(year=YEAR):
+    if year not in meta['rallies']:
+      em = _getRallyMeta(year=year)
+      meta['rallies'][year] = {k:em[k]['sas-eventid'] for k in em}
+      #em[['stub','sas-eventid']].set_index('stub').to_dict()['sas-eventid']
+    return meta['rallies'][year]
 
 
-def listRallies2(year=YEAR):
-    return getRallyIDs2(year)
+def listRallies(year=YEAR):
+    return getRallyIDs(year)
 
-def set_rallyId2(rally, year=YEAR, rallyIDs=None):
+def set_rallyId(rally, year=YEAR, rallyIDs=None):
     if rallyIDs is None:
-        rallyIDs = getRallyIDs2()
+        rallyIDs = getRallyIDs()
     if rally in rallyIDs:
         meta['rallyId']=rallyIDs[rally]
         meta['rally_name'] = rally
@@ -528,7 +534,7 @@ def getItinerary(meta):
     itinerary_stages=json_normalize(itinerary_json['itineraryLegs'],
                                     ['itinerarySections','stages'],
                                    meta=['itineraryLegId',['itinerarySections','itinerarySectionId']])
-    meta['stages']=itinerary_stages['stageId'].tolist()
+    meta['stageIds']=itinerary_stages['stageId'].tolist()
     #Should do this a pandas idiomatic way
     #meta['_stages']=zip(itinerary_stages['stageId'].tolist(),
      #                   itinerary_stages['code'].tolist(),
@@ -588,7 +594,9 @@ def _single_stage(meta2, stub, stageId):
     return _df
 
 def _stage_iterator(meta, stub, stage=None):
-    ''' Iterate through a list of stageId values and get requested resource. '''
+    ''' Iterate through a list of stageId values and get requested resource.
+        By default, we use a list of *all* the stageIds. '''
+
     meta2={'rallyId':meta['rallyId']}
     df = pd.DataFrame()
     #If stage is None get data for all stages
@@ -602,12 +610,13 @@ def _stage_iterator(meta, stub, stage=None):
         #If we have a list of stages (in form ['SS4','SS5']) get them all
         elif isinstance(stage, list) or isinstance(stage, tuple):
             for _stage in stage:
+                #Try to be sensitive: cope with stage (SS1 etc) or stageId
                 if isinstance(_stage,str) and _stage in meta['_stages']:
                     stages.append(meta['_stages'][_stage]['stageId'])
-                elif _stage in meta['stages']:
+                elif _stage in meta['stageIds']:
                     stages.append(_stage)
     else:
-        stages = meta['stages']
+        stages = meta['stageIds']
 
     #Get data for required stages
     #A stage is required if:
@@ -930,8 +939,10 @@ def get(rally, dbname='wrc19_test1.db', year=YEAR, running=False, stage=None, de
     stubs['url_base'] = stubs['url_base'].format(SASEVENTID=getEventIDs(year)[rally])
 
     #Should we go wholesale and just use even metadata?
-    meta =  set_rallyId2(rally, year)
 
+    set_rallyId(rally, year)
+
+    #We then bring meta dict pointer into local functional scope? Why??
     #conn = sqlite3.connect(dbname)
     conn = setup_db(dbname, meta)
 
