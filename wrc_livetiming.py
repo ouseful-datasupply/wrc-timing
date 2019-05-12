@@ -953,15 +953,11 @@ def get(rally, dbname='wrc19_test1.db', year=YEAR, running=False, stage=None, de
     #All stageIds are in meta['_stages]
     print('Getting {} stages for {}; still to run: {}'.format(defaultstages, rally, meta['torun']))
     if defaultstages=='run':
-      stage = [s for s in stage if s not in meta['torun']]
+      stage = stage if not stage else [s for s in stage if s not in meta['torun']]
     elif defaultstages=='all':
       #This plays on the default behaviour of save_rally()
       stage = None
       #stage = [s for s in meta['_stages']]
-
-    if stage == []:
-        #There are no stages so we force no stages
-        stage = ''
     
     save_rally(meta, conn, stage=stage, stagetimes= (defaultstages != 'none') )
 
