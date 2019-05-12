@@ -960,7 +960,7 @@ def get(rally, dbname='wrc19_test1.db', year=YEAR, running=False, stage=None, de
         #There are no stages so we force no stages
         stage = ''
     
-    save_rally(meta, conn, stage=stage)
+    save_rally(meta, conn, stage=stage, stagetimes= (defaultstages != 'none') )
 
     #Do we need to save chanpionship here?
     if championship:
@@ -1014,7 +1014,7 @@ def cli_metadata(year, name, stages):
 @click.option('--dbname', default='wrc_timing.db',  help='SQLite database name')
 @click.option('--running', is_flag=True, help='Only grab stages that are running')
 @click.option('--championship', is_flag=True, help='Grab championship tables too')
-@click.option('--default-stages', default=('run'), type=click.Choice(["all", "run"]),  help='If no stages specified, which do we grab?')
+@click.option('--default-stages', default=('run'), type=click.Choice(["all", "run", "none"]),  help='If no stages specified, grab what we can. ')
 @click.argument('name')
 @click.argument('stages', nargs=-1)
 def cli_get(year, dbname, running, championship, default_stages, name, stages):
