@@ -610,7 +610,8 @@ def _stage_iterator(meta, stub, stage=None):
     #A stage is required if:
     # - it is running;
     # - it is not ToRun and it is not in the database;
-    print('Grabbing', stages)
+    # stages are the IDs, not human readable - need to rename
+    #print('Grabbing', stages)
     for stageId in stages:
         _df = _single_stage(meta2, stub, stageId)
         df = pd.concat([df, _df], sort=False)
@@ -852,7 +853,7 @@ def setup_db(dbname, meta, newdb=False):
 
         #Get geo bits
         kml_processor(meta['event_meta'])
-        
+
         #Save the entry list, initial itinerary etc
         _save_rally_base(meta, conn)
 
@@ -1012,7 +1013,7 @@ def cli_get(year, dbname, running, championship, default_stages, name, stages):
     else:
         url_base = url_base.format(SASEVENTID=getEventID(year)[name])
         try:
-            display('\nGetting data for stages of {} {}: {}'.format(name, year, stages))
+            display('\nGetting data for stages of {} {}: {}'.format(name, year, defaultstages))
             get(name, dbname=dbname, year=year, running=running, stage=stages, defaultstages=default_stages, championship=championship )
         except:
             display('\nHmm... something went wrong in get...\nCheck rally name by running: wrc_rallies --year {}'.format(year))
