@@ -36,14 +36,18 @@ display = click.echo
 #Need a class?
 YEAR = datetime.datetime.now().year
 
-url_root='http://www.wrc.com/service/sasCacheApi.php?route={stub}'
-url_base='http://www.wrc.com/service/sasCacheApi.php?route=events/{SASEVENTID}/{{stub}}'
+#The module carries state about the current rally
+meta={ 'rallies': {}, 'rallies_metadata':{},
+  'rallyId':None, 'stages':[],'championshipId':None }
+
 
 #Call a resource by ID
 wrcapi='https://webappsdata.wrc.com/srv/wrc/json/api/wrcsrv/byId?id=%22{}%22' #requires resource ID
 
 #Need to clarify what stub goes with what root or base?
-stubs = { 'itinerary': 'rallies/{rallyId}/itinerary',
+stubs = { 'url_root':'http://www.wrc.com/service/sasCacheApi.php?route={stub}',
+          'url_base':'http://www.wrc.com/service/sasCacheApi.php?route=events/{SASEVENTID}/{{stub}}',
+          'itinerary': 'rallies/{rallyId}/itinerary',
           'startlists': 'rallies/{rallyId}/entries',
          'penalties': 'rallies/{rallyId}/penalties',
          'retirements': 'rallies/{rallyId}/retirements',
@@ -463,7 +467,6 @@ def listRallies2(year=YEAR):
     return getRallyIDs2(year)
 
 def set_rallyId2(rally, year=YEAR, rallyIDs=None):
-    meta={'rallyId':None, 'stages':[], 'championshipId':None }
     if rallyIDs is None:
         rallyIDs = getRallyIDs2()
     if rally in rallyIDs:
@@ -484,11 +487,11 @@ def nvToDict(nvdict, key='n',val='v', retdict=None):
 #assert nvToDict({'n': "id",'v': "adac-rallye-deutschland"}) == {'id': 'adac-rallye-deutschland'}
 
 def _get_single_json_table(meta, stub):
-    _json = requests.get( url_base.format(stub=stubs[stub].format(**meta) ) ).json()
+    _json = requests.get( stubs['url_base'].format(stub=stubs[stub].format(**meta) ) ).json()
     return json_normalize(_json)
 
 def _get_single_json_table_root(meta, stub):
-    _json = requests.get( url_root.format(stub=stubs[stub].format(**meta) ) ).json()
+    _json = requests.get( stubs['url_root'].format(stub=stubs[stub].format(**meta) ) ).json()
     return json_normalize(_json)
 
 #Datagrab: roster
@@ -512,7 +515,7 @@ def getRoster(meta):
 #Datagrab: itinerary
 def getItinerary(meta):
     ''' Get event itinerary. Also updates the stages metadata. '''
-    itinerary_json=requests.get( url_base.format(stub=stubs['itinerary'].format(**meta) ) ).json()
+    itinerary_json=requests.get( stubs['url_base'].format(stub=stubs['itinerary'].format(**meta) ) ).json()
     itinerary_event = json_normalize(itinerary_json).drop('itineraryLegs', axis=1)
     
     #meta='eventId' for eventId
@@ -540,7 +543,7 @@ def getItinerary(meta):
 
 #Datagrab: startlists
 def get_startlists(meta):
-    startlists_json=requests.get( url_base.format(stub=stubs['startlists'].format(**meta) ) ).json()
+    startlists_json=requests.get( stubs['url_base'].format(stub=stubs['startlists'].format(**meta) ) ).json()
     ff=[]
     for f in startlists_json:
         if f['manufacturer']['logoFilename'] is None:
@@ -579,7 +582,7 @@ def get_stagewinners(meta):
 def _single_stage(meta2, stub, stageId):
     ''' For a single stageId, get the requested resource. '''
     meta2['stageId']=stageId
-    _json=requests.get( url_base.format(stub=stubs[stub].format(**meta2) ) ).json()
+    _json=requests.get( stubs['url_base'].format(stub=stubs[stub].format(**meta2) ) ).json()
     _df = json_normalize(_json)
     _df['stageId'] = stageId
     return _df
@@ -648,11 +651,11 @@ def get_stage_times_overall(meta,stage=None):
 #Datagrab: seasons
 def get_seasons():
     ''' Get season info. '''
-    return requests.get(url_root.format(stub=stubs['seasons'] )).json()
+    return requests.get(stubs['url_root'].format(stub=stubs['seasons'] )).json()
 
 #Datagrab: seasonDetails
 def getSeasonDetails(seasonId):
-    return requests.get(url_root.format(stub=stubs['seasonDetails'].format(seasonId=seasonId) )).json()
+    return requests.get(stubs['url_root'].format(stub=stubs['seasonDetails'].format(seasonId=seasonId) )).json()
 
 
 #Datagrab: championship tables
@@ -683,7 +686,7 @@ def championship_tables(champ_class=None, champ_typ=None, year=YEAR):
         meta2={'championshipId': champ_num,
                'seasonId': seasonId}
         
-        championship_url = url_root.format(stub=stubs['championship'].format(**meta2) )
+        championship_url = stubs['url_root'].format(stub=stubs['championship'].format(**meta2) )
         championship_json=requests.get( championship_url ).json()
         if championship_json:
             _championship_lookup = json_normalize(championship_json).drop(['championshipEntries','championshipRounds'], axis=1)
@@ -922,7 +925,9 @@ def save_championship(conn, year=YEAR):
     
 def get(rally, dbname='wrc19_test1.db', year=YEAR, running=False, stage=None, defaultstages='run', championship=False):
     ''' defaultstages: all | notrun '''
-    
+
+    stubs['url_base'] = stubs['url_base'].format(SASEVENTID=getEventIDs(year)[rally])
+
     #Should we go wholesale and just use even metadata?
     meta =  set_rallyId2(rally, year)
 
@@ -969,7 +974,8 @@ def get_championship(dbname='wrc19_test1.db', year=YEAR):
     display('Grabbing championship data tables for {}'.format(year))
     save_championship(conn, year=year)
 
-
+#More initialisation
+meta['rallies'][YEAR]= getEventIDs()
 
 #Checks...
 #q="SELECT name FROM sqlite_master WHERE type = 'table';"
