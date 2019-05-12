@@ -46,7 +46,7 @@ wrcapi='https://webappsdata.wrc.com/srv/wrc/json/api/wrcsrv/byId?id=%22{}%22' #r
 
 #Need to clarify what stub goes with what root or base?
 stubs = { 'url_root':'http://www.wrc.com/service/sasCacheApi.php?route={stub}',
-          'url_base':'http://www.wrc.com/service/sasCacheApi.php?route=events/{SASEVENTID}/{{stub}}',
+          'url_base_pattern':'http://www.wrc.com/service/sasCacheApi.php?route=events/{SASEVENTID}/{{stub}}',
           'itinerary': 'rallies/{rallyId}/itinerary',
           'startlists': 'rallies/{rallyId}/entries',
          'penalties': 'rallies/{rallyId}/penalties',
@@ -936,7 +936,8 @@ def save_championship(conn, year=YEAR):
 def get(rally, dbname='wrc19_test1.db', year=YEAR, running=False, stage=None, defaultstages='run', championship=False):
     ''' defaultstages: all | notrun '''
 
-    stubs['url_base'] = stubs['url_base'].format(SASEVENTID=getEventIDs(year)[rally])
+    stage = stage if isinstance(stage,list) else [stage]
+    stubs['url_base'] = stubs['url_base_pattern'].format(SASEVENTID=getEventIDs(year)[rally])
 
     #Should we go wholesale and just use even metadata?
 
@@ -962,7 +963,7 @@ def get(rally, dbname='wrc19_test1.db', year=YEAR, running=False, stage=None, de
 
     #Omit stages that are torun - should we do this later?
     #All stageIds are in meta['_stages]
-    print('Getting {} stages for {}; still to run: {}'.format(defaultstages, rally, meta['torun']))
+    print('Getting {} stages {} for {}; still to run: {}'.format(defaultstages, ', '.join(stage), rally, meta['torun']))
     if defaultstages=='run':
       stage = stage if not stage else [s for s in stage if s not in meta['torun']]
     elif defaultstages=='all':
