@@ -975,7 +975,7 @@ def get_championship(dbname='wrc19_test1.db', year=YEAR):
     save_championship(conn, year=year)
 
 #More initialisation
-meta['rallies'][YEAR]= getEventIDs()
+meta['rallies'][YEAR]= getEventIDs(YEAR)
 
 #Checks...
 #q="SELECT name FROM sqlite_master WHERE type = 'table';"
@@ -986,13 +986,20 @@ meta['rallies'][YEAR]= getEventIDs()
 
 # TO DO - allow setting of things like dbname as an env var
 
+def showrallies(year=None):
+  ''' Display rallies for current or specified year. '''
+  if year is None:
+    year = datetime.datetime.now().year
+  if year not in meta['rallies']:
+    meta['rallies'][year]= getEventIDs(year)
+  availableRallies = '\nAvailable rallies for {} are: {}\n'.format(year, ', '.join([k for k in meta['rallies'][year]]))
+  display(availableRallies)
+
 @click.command()
 @click.option('--year',default=datetime.datetime.now().year,help='Year results are required for (defaults to current year)')
 def cli_showrallies(year):
     ''' Show available rallies. '''   
-    names = getEventID(year).keys()
-    availableRallies = '\nAvailable rallies for {} are: {}\n'.format(year, ', '.join([k for k in names]))
-    display(availableRallies)
+    showrallies(year)
 
 @click.command()
 def cli_metadata(year, name, stages):
