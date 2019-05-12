@@ -832,6 +832,7 @@ def _save_rally_base(meta, conn):
 
     save_itinerary(meta, conn)
 
+
 def setup_db(dbname, meta, newdb=False):
     ''' Setup a database, if required, and return a connection. '''
     #In some situations, we may want a fresh start
@@ -922,7 +923,7 @@ def save_championship(conn, year=YEAR):
     dbfy(conn, championship_rounds, 'championship_rounds', if_exists='replace')
     # TO DO - uosert error if column name contains a .
     dbfy(conn, championship_events, 'championship_events', if_exists='replace')
-    
+
 def get(rally, dbname='wrc19_test1.db', year=YEAR, running=False, stage=None, defaultstages='run', championship=False):
     ''' defaultstages: all | notrun '''
 
@@ -942,13 +943,15 @@ def get(rally, dbname='wrc19_test1.db', year=YEAR, running=False, stage=None, de
     meta['torun'] = pd.read_sql('SELECT code FROM itinerary_stages WHERE status="ToRun"',conn)['code'].to_list()
   
     #We can limit ourselves to just grabbing running stages
+    #This info is already in meta['_stages']
     if running:
       running_stages = pd.read_sql('SELECT code FROM itinerary_stages WHERE status="Running"',conn)['code'].to_list()
       stage = [s for s in stage if s in running_stages ]
       print('Getting data for any running stages:', stage)
 
-    #Omit stages that are torun
-    print(defaultstages, stage, meta['torun'])
+    #Omit stages that are torun - should we do this later?
+    #All stageIds are in meta['_stages]
+    print('Getting {} stages for {}; still to run: {}'.format(defaultstages, rally, meta['torun']))
     if defaultstages=='run':
       stage = [s for s in stage if s not in meta['torun']]
     elif defaultstages=='all':
