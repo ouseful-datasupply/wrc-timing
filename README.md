@@ -1,6 +1,9 @@
 # wrc-timing
 Data grabber for WRC timing / classification data
 
+
+__THE FOLLOWING MAY BE WRONG... CHECK THE CODE TO BE SURE!__
+
 ```
 Usage: wrc_rallies [OPTIONS]
 
