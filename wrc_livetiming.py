@@ -29,7 +29,9 @@ import kml2geojson
 #display = print
 display = click.echo
 
-#Setup:
+_SEEDED_TABLES = False
+
+# Setup:
 
 #This is used as a default in function definitions?
 #Is there a tidier way of handling year default?
@@ -744,7 +746,7 @@ def cleardbtable(conn, table):
     ''' Clear the table whilst retaining the table definition '''
     c = conn.cursor()
     c.execute('DELETE FROM "{}"'.format(table))
-    
+
 def dbfy(conn, df, table, if_exists='upsert', index=False, clear=False, **kwargs):
     ''' Save a dataframe as a SQLite table.
         Clearing or replacing a table will first empty the table of entries but retain the structure. '''
@@ -779,13 +781,13 @@ def save_itinerary(meta, conn):
     dbfy(conn, itinerary_controls, 'itinerary_controls', if_exists='replace')
 
 
-#Geo:
-#What is df_rallydata?
-#ALso TO DO: bring in a grabber for the live timing and SQLise that...
+# Geo:
+# What is df_rallydata?
+# ALso TO DO: bring in a grabber for the live timing and SQLise that...
 
 def get_kml_slug(meta):
     return meta['kmlfile'].unique().tolist()
-    
+
 def get_kml_slugs(df):
     return df['kmlfile'].unique().tolist()
 
@@ -794,10 +796,10 @@ def get_kml_file(kml_slug, outdirname='maps'):
     r=requests.get(kmlurl)  
     with open("{}/{}.xml".format(outdirname,kml_slug), 'wb') as f:
         f.write(r.content)
-        
+
 def kml_to_json(kml_slug,indirname='maps', outdirname='geojson'):
     kml2geojson.main.convert('{}/{}.xml'.format(indirname,kml_slug),outdirname)
-    
+
 def kml_processor(o, indirname='maps',outdirname='geojson'):
     dirnames = [indirname, outdirname]
     for dirname in dirnames:
@@ -812,9 +814,9 @@ def kml_processor(o, indirname='maps',outdirname='geojson'):
         kml_to_json(kml_slug,indirname,outdirname)
 
 
-#TO DO: add to database
-#get_kml_file('montecarlo_2019')
-#kml_to_json('montecarlo_2019','maps/','maps/')
+# TO DO: add to database
+# get_kml_file('montecarlo_2019')
+# kml_to_json('montecarlo_2019','maps/','maps/')
 # We should also look at storing the data as geo object in geospatialite
 
 def get_map_stages(gj):
@@ -911,7 +913,7 @@ def save_rally(meta, conn, stage=None, stagetimes=True):
       stage_times_overall = get_stage_times_overall(meta, stage)
       dbfy(conn, stage_times_overall, 'stage_times_overall')
 
-    
+
 def save_championship(conn, year=YEAR):
     ''' Save all championship tables for a particular year. '''
     championship_lookup, championship_results, _championship_entries_all, \
@@ -939,24 +941,33 @@ def get(rally, dbname='wrc19_test1.db', year=YEAR, running=False, stage=None, de
         Force download of all stages with: defaultstages='all'
         defaultstages: all | run '''
 
-    #stage = stage if isinstance(stage,list) else [stage]
-    if stage:
-      stage = stage if isinstance(stage,list) else [stage]
-    else:
-      stage=None
-    stubs['url_base'] = stubs['url_base_pattern'].format(SASEVENTID=getEventIDs(year)[rally])
 
     #Should we go wholesale and just use even metadata?
 
     set_rallyId(rally, year)
 
+    stubs['url_base'] = stubs['url_base_pattern'].format(SASEVENTID=getEventIDs(year)[rally])
+
     #We then bring meta dict pointer into local functional scope? Why??
     #conn = sqlite3.connect(dbname)
     conn = setup_db(dbname, meta)
 
+    #If championship data aren't set, get the details into them...
+    #Need a guard here... do a test on the db properly - hack for now
+    if not _SEEDED_TABLES:
+      display('Grabbing championship data tables for {}'.format(year))
+      save_championship(conn, year=year)
+      _SEEDED_TABLES = TRUE
+
     #This is duplicated if we set up a new db...
     #The save_itinerary step also calls the itinerary and updates meta
     save_itinerary(meta, conn)
+
+    #stage = stage if isinstance(stage,list) else [stage]
+    if stage:
+      stage = stage if isinstance(stage,list) else [stage]
+    else:
+      stage = list(meta['_stages'].keys())
 
     #We can ignore stages that are ToRun - we can ignore this if we want to forceall
     meta['torun'] = pd.read_sql('SELECT code FROM itinerary_stages WHERE status="ToRun"',conn)['code'].to_list()
@@ -983,11 +994,11 @@ def get(rally, dbname='wrc19_test1.db', year=YEAR, running=False, stage=None, de
     #Do we need to save chanpionship here?
     if championship:
       save_championship(conn, year=year)
-    
+
 def get_championship(dbname='wrc19_test1.db', year=YEAR):
     #Should we really use or pass in a conn in to a db
     # that we know is properly configured?
-    conn = setup_db(dbname)
+    conn = setup_db(dbname, meta)
 
     display('Grabbing championship data tables for {}'.format(year))
     save_championship(conn, year=year)
@@ -995,11 +1006,11 @@ def get_championship(dbname='wrc19_test1.db', year=YEAR):
 #More initialisation
 meta['rallies'][YEAR]= getEventIDs(YEAR)
 
-#Checks...
-#q="SELECT name FROM sqlite_master WHERE type = 'table';"
-#pd.read_sql(q,conn)
+# Checks...
+# q="SELECT name FROM sqlite_master WHERE type = 'table';"
+# pd.read_sql(q,conn)
 
-#This needs to be split up...
+# This needs to be split up...
 
 
 # TO DO - allow setting of things like dbname as an env var
