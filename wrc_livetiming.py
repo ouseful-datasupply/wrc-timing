@@ -320,13 +320,13 @@ CREATE TABLE "championship_entries_codrivers" (
   "entrantId" TEXT,
   "ManufacturerTyre" TEXT,
   "Manufacturer" TEXT,
+  "tyreManufacturer" TEXT,
   "FirstName" TEXT,
   "CountryISO3" TEXT,
   "CountryISO2" TEXT,
   "LastName" TEXT,
   "manufacturerId" INTEGER,
   "personId" INTEGER,
-  "tyreManufacturer" TEXT,
   FOREIGN KEY ("championshipId") REFERENCES "championship_lookup" ("championshipId")
 );
 CREATE TABLE "championship_entries_manufacturers" (
@@ -380,13 +380,13 @@ CREATE TABLE "championship_entries_drivers" (
   "entrantId" TEXT,
   "ManufacturerTyre" TEXT,
   "Manufacturer" TEXT,
+  "tyreManufacturer" TEXT,
   "FirstName" TEXT,
   "CountryISO3" TEXT,
   "CountryISO2" TEXT,
   "LastName" TEXT,
   "manufacturerId" INTEGER,
   "personId" INTEGER,
-  "tyreManufacturer" TEXT,
   FOREIGN KEY ("championshipId") REFERENCES "championship_lookup" ("championshipId")
 );
 CREATE TABLE "event_metadata" (
@@ -423,6 +423,50 @@ CREATE TABLE "event_metadata" (
   "time-zone" TEXT,
   "tzoffset" TEXT,
   "year" INTEGER
+);
+
+CREATE TABLE "season" (
+  "name" TEXT,
+  "seasonId" INTEGER,
+  "year" INTEGER,
+  PRIMARY KEY ("seasonId")
+);
+
+CREATE TABLE "season_rounds" (
+  "event.categories" TEXT,
+  "event.clerkOfTheCourse" TEXT,
+  "event.country.countryId" INTEGER,
+  "event.country.iso2" TEXT,
+  "event.country.iso3" TEXT,
+  "event.country.name" TEXT,
+  "event.countryId" INTEGER,
+  "event.eventId" INTEGER,
+  "event.finishDate" TEXT,
+  "event.location" TEXT,
+  "event.mode" TEXT,
+  "event.name" TEXT,
+  "event.organiserUrl" TEXT,
+  "event.slug" TEXT,
+  "event.startDate" TEXT,
+  "event.stewards" TEXT,
+  "event.surfaces" TEXT,
+  "event.templateFilename" TEXT,
+  "event.timeZoneId" INTEGER,
+  "event.timeZoneName" INTEGER,
+  "event.timeZoneOffset" INTEGER,
+  "event.trackingEventId" INTEGER,
+  "eventId" INTEGER,
+  "order" INTEGER,
+  "seasonId" INTEGER,
+  FOREIGN KEY ("seasonId") REFERENCES "season" ("seasonId")
+);
+
+CREATE TABLE "season_championships" (
+  "championshipId" INTEGER,
+  "name" TEXT,
+  "seasonId" INTEGER,
+  "type" TEXT,
+  FOREIGN KEY ("seasonId") REFERENCES "season" ("seasonId")
 );
 '''
 
