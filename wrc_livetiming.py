@@ -706,11 +706,48 @@ def get_stage_times_overall(meta,stage=None):
 #Datagrab: seasons
 def get_seasons():
     ''' Get season info. '''
-    return requests.get(stubs['url_root'].format(stub=stubs['seasons'] )).json()
+    return json_normalize( requests.get(stubs['url_root'].format(stub=stubs['seasons'] )).json() )
+
+def get_seasonId(year=YEAR):
+    ''' Get seasonId by year. '''
+    df = get_seasons()
+    return df.loc[df['year']==int(year),'seasonId'].iloc[0]
 
 #Datagrab: seasonDetails
-def getSeasonDetails(seasonId):
+def get_season_details(seasonId):
     return requests.get(stubs['url_root'].format(stub=stubs['seasonDetails'].format(seasonId=seasonId) )).json()
+
+def get_season_rounds(year=None, seasonId=None):
+    if year is None and seasonId is None:
+      year = YEAR
+
+    if year is not None:
+      seasonId = get_seasonId(YEAR)
+
+    if seasonId is not None:
+      return json_normalize( get_season_details(seasonId)['seasonRounds'] )
+    else:
+      return pd.DataFrame()
+
+def get_season_championships(year=None, seasonId=None):
+    ''' Get championships in a given season. '''
+
+    if year is None and seasonId is None:
+      year = YEAR
+
+    if year is not None:
+      seasonId = get_seasonId(year)
+
+    if seasonId is not None:
+      return json_normalize( get_season_details(seasonId)['championships'] )
+    else:
+      return pd.DataFrame()
+
+def save_season_rounds(conn, year=YEAR):
+    ''' Save season data to db. '''
+    dbfy(conn, get_season_championships(year)[['championshipId','name', 'seasonId','type']], 'season_championships')
+    dbfy(conn, get_seasons(), 'season')
+    dbfy(conn, get_season_rounds(year), 'season_rounds')
 
 
 #Datagrab: championship tables
@@ -725,10 +762,9 @@ def championship_tables(champ_class=None, champ_typ=None, year=YEAR):
     championship_events = pd.DataFrame()
     championship_results = pd.DataFrame()
     
-    seasonIds = get_seasons()
-    seasonId = { d['year']:d['seasonId'] for d in get_seasons()}[year]
+    seasonId = get_seasonId(year)
     
-    championships = getSeasonDetails(seasonId)['championships']
+    championships = get_season_details(seasonId)['championships']
     
     for championship in championships:
         champ_num = championship['championshipId']
@@ -907,7 +943,18 @@ def setup_db(dbname, meta, newdb=False):
         c.executescript(SETUP_Q)
         c.executescript(SETUP_VIEWS_Q)
 
+        # Save season info
+        display('Grabbing season data tables for {}'.format(YEAR))
+        save_season_rounds(conn, year=YEAR)
+
+        #Save championship info
+        #If championship data aren't set, get the details into them...
+        #Need a guard here... do a test on the db properly
+        display('Grabbing championship data tables for {}'.format(YEAR))
+        seed_championship(conn, year=YEAR)
+
         #Populate the database with event metadata
+        display('Grabbing event metadata tables.')
         dbfy(conn, getEventMetadata(), 'event_metadata', if_exists='replace')
 
         #Get geo bits
@@ -915,6 +962,8 @@ def setup_db(dbname, meta, newdb=False):
 
         #Save the entry list, initial itinerary etc
         _save_rally_base(meta, conn)
+
+       
 
     return conn
 
@@ -979,6 +1028,13 @@ def save_championship(conn, year=YEAR):
     # TO DO - uosert error if column name contains a .
     dbfy(conn, championship_events, 'championship_events', if_exists='replace')
 
+def seed_championship(conn, year=YEAR):
+  ''' Get championship data if not already in db. '''
+  #TO DO - only do this if required?
+  dbfy(conn, pd.DataFrame(get_seasons()),"season")
+  save_championship(conn, year=YEAR)
+
+
 def get(rally, dbname='wrc19_test1.db', year=YEAR, running=False, stage=None, defaultstages='run', championship=False):
     ''' Get specified stages. If a stage is explicitly identified, just get that stage.
         Else by default get all run stages (defaultstages='run').
@@ -995,13 +1051,6 @@ def get(rally, dbname='wrc19_test1.db', year=YEAR, running=False, stage=None, de
     #We then bring meta dict pointer into local functional scope? Why??
     #conn = sqlite3.connect(dbname)
     conn = setup_db(dbname, meta)
-
-    #If championship data aren't set, get the details into them...
-    #Need a guard here... do a test on the db properly - hack for now
-    if not _SEEDED_TABLES:
-      display('Grabbing championship data tables for {}'.format(year))
-      save_championship(conn, year=year)
-      _SEEDED_TABLES = TRUE
 
     #This is duplicated if we set up a new db...
     #The save_itinerary step also calls the itinerary and updates meta
