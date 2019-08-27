@@ -10,7 +10,8 @@ setup(
         'pandas',
         'isodate',
         'sqlite-utils',
-        'kml2geojson'
+        'kml2geojson',
+        'fake_useragent'
     ],
     entry_points='''
         [console_scripts]

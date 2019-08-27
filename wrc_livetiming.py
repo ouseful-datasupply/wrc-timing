@@ -9,11 +9,15 @@ warnings.filterwarnings(
 )
 
 
+# +
 import requests
 import re
 import json
 import os
 import datetime
+
+from fake_useragent import UserAgent
+# -
 
 import time
 # -
@@ -574,10 +578,19 @@ def getRoster(meta):
 #Datagrab: itinerary
 def getItinerary(meta):
     ''' Get event itinerary. Also updates the stages metadata. '''
-    itinerary_json=requests.get( stubs['url_base'].format(stub=stubs['itinerary'].format(**meta) ) ).json()
+    _url = stubs['url_base'].format(stub=stubs['itinerary'].format(**meta) )
+    print(_url)
+    headers = {'User-Agent': str(UserAgent().random) }
+    
+    s = requests.Session()
+    s.get('https://www.wrc.com/en/wrc/', headers=headers)
+    
+    itinerary_json=s.get( _url ).json()
+    print('itinerary_json:',itinerary_json)
     itinerary_event = {}#json_normalize(itinerary_json).drop('itineraryLegs', axis=1)
     
     #meta='eventId' for eventId
+    
     itinerary_legs = json_normalize(itinerary_json, 
                                     record_path='itineraryLegs').drop('itinerarySections', axis=1)
     #meta='eventId' for eventId
@@ -638,10 +651,16 @@ def get_stagewinners(meta):
 
 
 #Utils:
-def _single_stage(meta2, stub, stageId):
+def _single_stage(meta2, stub, stageId, nicely=0.7):
     ''' For a single stageId, get the requested resource. '''
+    
+    #play nice
+    time.sleep(nicely)
+    headers = {'User-Agent': str(UserAgent().random),
+               'referer': 'https://www.wrc.com/en/' }
+    
     meta2['stageId']=stageId
-    _json=requests.get( stubs['url_base'].format(stub=stubs[stub].format(**meta2) ) ).json()
+    _json=requests.get( stubs['url_base'].format(stub=stubs[stub].format(**meta2) )).json()
     _df = json_normalize(_json)
     _df['stageId'] = stageId
     return _df
@@ -679,6 +698,7 @@ def _stage_iterator(meta, stub, stage=None):
     #print('Grabbing', stages)
     for stageId in stages:
         _df = _single_stage(meta2, stub, stageId)
+        display('{} rows for {} {}'.format(len(_df),stub,stageId))
         df = pd.concat([df, _df], sort=False)
     return df.reset_index(drop=True)
 
@@ -766,14 +786,18 @@ def get_season_championships(year=None, seasonId=None):
 
 def save_season_rounds(conn, year=YEAR):
     ''' Save season data to db. '''
-    dbfy(conn, get_season_championships(year)[['championshipId','name', 'seasonId','type']], 'season_championships')
-    dbfy(conn, get_seasons(), 'season')
-    dbfy(conn, get_season_rounds(year), 'season_rounds')
+    try:
+
+        dbfy(conn, get_season_championships(year)[['championshipId','name', 'seasonId','type']], 'season_championships')
+        dbfy(conn, get_seasons(), 'season')
+        dbfy(conn, get_season_rounds(year), 'season_rounds')
+    except:
+        print('Getting season data error...')
 
 
 #Datagrab: championship tables
 # TO DO: rename, or extract into get_championship_rounds()?
-#A function het_championship already exists
+#A function get_championship already exists
 def championship_tables(champ_class=None, champ_typ=None, year=YEAR):
     ''' Get all championship tables in a particular championship and / or class. '''
     #if championship is None then get all
@@ -793,7 +817,8 @@ def championship_tables(champ_class=None, champ_typ=None, year=YEAR):
     #championships = get_season_championships()
     
     # HACK TO DO
-    # pandas v 25 introduces breaking changes on json_nor
+    # pandas v 25 introduces breaking changes on json_normalize  - extracts everything
+    # Need to set eg: max_level=0
     championships = [{'championshipId':24, 'name': 'FIA World Rally Championship for Drivers',
                       'type':'Person'},
                     {'championshipId':25, 'name': 'FIA World Rally Championship for Co-Drivers',
@@ -832,10 +857,10 @@ def championship_tables(champ_class=None, champ_typ=None, year=YEAR):
             
             championship_entries_all[champType] = pd.concat([championship_entries_all[champType],_championship_entries],sort=False)
 
-            _championship_rounds = json_normalize(championship_json,['championshipRounds'] ).drop('event', axis=1)
+            _championship_rounds = json_normalize(championship_json,['championshipRounds'], max_level=0 ).drop('event', axis=1)
             championship_rounds = pd.concat([championship_rounds,_championship_rounds],sort=False).drop_duplicates()
 
-            _events_json = json_normalize(championship_json,['championshipRounds' ])['event']
+            _events_json = json_normalize(championship_json,['championshipRounds' ], max_level=0)['event']
             _championship_events = json_normalize(_events_json)
             #Below also available as https://www.wrc.com/service/sasCacheApi.php?route=seasons/{seasonId}/championships/{championshipId}
             # eg https://www.wrc.com/service/sasCacheApi.php?route=seasons/4/championships/24
@@ -946,7 +971,6 @@ def get_map_stages(gj):
     return gff
 
 
-
 def _save_rally_base(meta, conn):
     display('Getting base info...')
 
@@ -980,14 +1004,14 @@ def setup_db(dbname, meta, newdb=False):
         c.executescript(SETUP_VIEWS_Q)
 
         # Save season info
-        display('NOT Grabbing season data tables for {}'.format(YEAR))
-        #save_season_rounds(conn, year=YEAR)
+        display('Grabbing season data tables for {}'.format(YEAR))
+        save_season_rounds(conn, year=YEAR)
 
         #Save championship info
         #If championship data aren't set, get the details into them...
         #Need a guard here... do a test on the db properly
-        display('NOT Grabbing championship data tables for {}'.format(YEAR))
-        #seed_championship(conn, year=YEAR)
+        display('Grabbing championship data tables for {}'.format(YEAR))
+        seed_championship(conn, year=YEAR)
         #eg https://www.wrc.com/service/sasCacheApi.php?route=seasons%2F4%2Fchampionships%2F24
 
         #Ony run this if there is event specified?
@@ -999,15 +1023,11 @@ def setup_db(dbname, meta, newdb=False):
             #Get geo bits
             kml_processor(meta['event_meta'])
 
-        #Get geo bits
-        kml_processor(meta['event_meta'])
-
             #Save the entry list, initial itinerary etc
             _save_rally_base(meta, conn)
 
        
     return conn
-
 
 
 #Grabbers
