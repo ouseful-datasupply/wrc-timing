@@ -568,7 +568,7 @@ def getRoster(meta):
 def getItinerary(meta):
     ''' Get event itinerary. Also updates the stages metadata. '''
     itinerary_json=requests.get( stubs['url_base'].format(stub=stubs['itinerary'].format(**meta) ) ).json()
-    itinerary_event = json_normalize(itinerary_json).drop('itineraryLegs', axis=1)
+    itinerary_event = {}#json_normalize(itinerary_json).drop('itineraryLegs', axis=1)
     
     #meta='eventId' for eventId
     itinerary_legs = json_normalize(itinerary_json, 
@@ -703,10 +703,17 @@ def get_stage_times_overall(meta,stage=None):
     return stage_times_overall
 
 
+# +
 #Datagrab: seasons
+
 def get_seasons():
     ''' Get season info. '''
+    # TO DO - this doesn't resolve?
     return json_normalize( requests.get(stubs['url_root'].format(stub=stubs['seasons'] )).json() )
+
+
+
+# -
 
 def get_seasonId(year=YEAR):
     ''' Get seasonId by year. '''
@@ -854,7 +861,7 @@ def save_itinerary(meta, conn):
     itinerary_event, itinerary_legs, itinerary_sections, \
     itinerary_stages, itinerary_controls = getItinerary(meta)
 
-    dbfy(conn, itinerary_event, 'itinerary_event', if_exists='replace')
+    #dbfy(conn, itinerary_event, 'itinerary_event', if_exists='replace')
     dbfy(conn, itinerary_legs, 'itinerary_legs', if_exists='replace')
     dbfy(conn, itinerary_sections, 'itinerary_sections', if_exists='replace')
     dbfy(conn, itinerary_stages, 'itinerary_stages', if_exists='replace')
@@ -944,14 +951,14 @@ def setup_db(dbname, meta, newdb=False):
         c.executescript(SETUP_VIEWS_Q)
 
         # Save season info
-        display('Grabbing season data tables for {}'.format(YEAR))
-        save_season_rounds(conn, year=YEAR)
+        display('NOT Grabbing season data tables for {}'.format(YEAR))
+        #save_season_rounds(conn, year=YEAR)
 
         #Save championship info
         #If championship data aren't set, get the details into them...
         #Need a guard here... do a test on the db properly
-        display('Grabbing championship data tables for {}'.format(YEAR))
-        seed_championship(conn, year=YEAR)
+        display('NOT Grabbing championship data tables for {}'.format(YEAR))
+        #seed_championship(conn, year=YEAR)
 
         #Populate the database with event metadata
         display('Grabbing event metadata tables.')
@@ -1035,19 +1042,22 @@ def seed_championship(conn, year=YEAR):
   save_championship(conn, year=YEAR)
 
 
-def get(rally, dbname='wrc19_test1.db', year=YEAR, running=False, stage=None, defaultstages='run', championship=False):
+def get(rally, dbname='wrc19_test1.db', year=YEAR, 
+        running=False, stage=None, defaultstages='run', championship=False):
     ''' Get specified stages. If a stage is explicitly identified, just get that stage.
         Else by default get all run stages (defaultstages='run').
         Force download of all stages with: defaultstages='all'
         defaultstages: all | run '''
 
 
-    #Should we go wholesale and just use even metadata?
+    #Should we go wholesale and just use event metadata?
 
     set_rallyId(rally, year)
 
     stubs['url_base'] = stubs['url_base_pattern'].format(SASEVENTID=getEventIDs(year)[rally])
 
+    #print('Meta is:',meta)
+    
     #We then bring meta dict pointer into local functional scope? Why??
     #conn = sqlite3.connect(dbname)
     conn = setup_db(dbname, meta)
@@ -1084,7 +1094,7 @@ def get(rally, dbname='wrc19_test1.db', year=YEAR, running=False, stage=None, de
     
     save_rally(meta, conn, stage=stage, stagetimes= (defaultstages != 'none') )
 
-    #Do we need to save chanpionship here?
+    #Do we need to save championship here?
     if championship:
       save_championship(conn, year=year)
 
