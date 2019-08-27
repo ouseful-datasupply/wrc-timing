@@ -15,6 +15,9 @@ import json
 import os
 import datetime
 
+import time
+# -
+
 import sqlite3
 from sqlite_utils import Database
 
@@ -476,6 +479,10 @@ SETUP_VIEWS_Q = '''
 def _getEventMetadata():
     ''' Get event metadata as JSON data feed from WRC API. '''
     url='https://webappsdata.wrc.com/srv/wrc/json/api/wrcsrv/byType?t=%22Event%22&maxdepth=1'
+    
+    #Play nice
+    time.sleep(1)
+    
     eventmeta = requests.get(url).json()
     return eventmeta
 
@@ -709,8 +716,15 @@ def get_stage_times_overall(meta,stage=None):
 def get_seasons():
     ''' Get season info. '''
     # TO DO - this doesn't resolve?
-    return json_normalize( requests.get(stubs['url_root'].format(stub=stubs['seasons'] )).json() )
+    #return json_normalize( requests.get(stubs['url_root'].format(stub=stubs['seasons'] ), max_level=0).json() )
 
+    #Use this as a basis for a test
+    _hack = pd.DataFrame([{'name':'World Rally Championship','seasonId':1, 'year':2018},
+             {'name':'World Rally Championship','seasonId':4, 'year':2019}])
+    return _hack
+
+#Maybe useful:
+#seasonURL = 'https://webappsdata.wrc.com/srv/wrc/json/api/wrcsrv/byType?t=%22Season%22&maxdepth=1'
 
 
 # -
@@ -769,9 +783,24 @@ def championship_tables(champ_class=None, champ_typ=None, year=YEAR):
     championship_events = pd.DataFrame()
     championship_results = pd.DataFrame()
     
+    
+    #seasonId is broken... where else can we find it?
     seasonId = get_seasonId(year)
     
-    championships = get_season_details(seasonId)['championships']
+    #championships = get_season_details(seasonId)['championships']
+    
+    #What should get_season_championships() return?
+    #championships = get_season_championships()
+    
+    # HACK TO DO
+    # pandas v 25 introduces breaking changes on json_nor
+    championships = [{'championshipId':24, 'name': 'FIA World Rally Championship for Drivers',
+                      'type':'Person'},
+                    {'championshipId':25, 'name': 'FIA World Rally Championship for Co-Drivers',
+                      'type':'Person'},
+                     {'championshipId':26, 'name': 'FIA World Rally Championship for Manufacturers',
+                      'type':'Manufacturer'},
+                    ]
     
     for championship in championships:
         champ_num = championship['championshipId']
@@ -959,19 +988,24 @@ def setup_db(dbname, meta, newdb=False):
         #Need a guard here... do a test on the db properly
         display('NOT Grabbing championship data tables for {}'.format(YEAR))
         #seed_championship(conn, year=YEAR)
+        #eg https://www.wrc.com/service/sasCacheApi.php?route=seasons%2F4%2Fchampionships%2F24
 
+        #Ony run this if there is event specified?
         #Populate the database with event metadata
         display('Grabbing event metadata tables.')
         dbfy(conn, getEventMetadata(), 'event_metadata', if_exists='replace')
+        
+        if 'event_meta' in meta:
+            #Get geo bits
+            kml_processor(meta['event_meta'])
 
         #Get geo bits
         kml_processor(meta['event_meta'])
 
-        #Save the entry list, initial itinerary etc
-        _save_rally_base(meta, conn)
+            #Save the entry list, initial itinerary etc
+            _save_rally_base(meta, conn)
 
        
-
     return conn
 
 
@@ -1038,7 +1072,7 @@ def save_championship(conn, year=YEAR):
 def seed_championship(conn, year=YEAR):
   ''' Get championship data if not already in db. '''
   #TO DO - only do this if required?
-  dbfy(conn, pd.DataFrame(get_seasons()),"season")
+  #dbfy(conn, pd.DataFrame(get_seasons()),"season")
   save_championship(conn, year=YEAR)
 
 
