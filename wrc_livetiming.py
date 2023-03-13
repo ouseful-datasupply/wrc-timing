@@ -1,6 +1,11 @@
+# # WRC Live timing
+#
+# I have completely lost track of this - whether this was new or deprecated...
+
 import click
 
 
+# +
 import warnings
 warnings.filterwarnings(
     action='ignore',
@@ -9,8 +14,14 @@ warnings.filterwarnings(
 )
 
 
+
+
 # +
 import requests
+from requests.packages.urllib3.exceptions import InsecureRequestWarning
+requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+
+
 import re
 import json
 import os
@@ -26,7 +37,7 @@ import sqlite3
 from sqlite_utils import Database
 
 import pandas as pd
-from pandas.io.json import json_normalize
+from pandas import json_normalize
 
 import isodate
 
@@ -70,6 +81,23 @@ stubs = { 'url_root':'http://www.wrc.com/service/sasCacheApi.php?route={stub}',
          'championship':'seasons/{seasonId}/championships/{championshipId}',
          'championship_results':'seasons/{seasonId}/championships/{championshipId}/results',
         }
+
+
+stubs = { 'url_root':'http://www.wrc.com/service/sasCacheApi.php?route={stub}',
+'url_base_pattern':'http://www.wrc.com/service/sasCacheApi.php?route=events%2F{SASEVENTID}%2F{{stub}}',
+'itinerary': 'rallies%2F{rallyId}%2Fitinerary',
+'startlists': 'rallies%2F{rallyId}%2Fentries',
+'penalties': 'rallies%2F{rallyId}%2Fpenalties',
+'retirements': 'rallies%2F{rallyId}%2Fretirements',
+'stagewinners':'rallies%2F{rallyId}%2Fstagewinners',
+'overall':'stages%2F{stageId}%2Fresults?rallyId={rallyId}',
+'split_times':'stages%2F{stageId}%2Fsplittimes?rallyId={rallyId}',
+'stage_times_stage':'stages%2F{stageId}%2Fstagetimes?rallyId={rallyId}',
+'stage_times_overall':'stages%2F{stageId}%2Fresults?rallyId={rallyId}',
+'seasons':'seasons',
+'seasonDetails':'seasons%2F{seasonId}',
+'championship':'seasons%2F{seasonId}%2Fchampionships%2F{championshipId}',
+'championship_results':'seasons%2F{seasonId}%2Fchampionships%2F{championshipId}%2Fresults',      }
 
 #SQL in wrcResults.sql
 SETUP_Q='''
@@ -480,6 +508,8 @@ CREATE TABLE "season_championships" (
 SETUP_VIEWS_Q = '''
 '''
 
+
+
 def _getEventMetadata():
     ''' Get event metadata as JSON data feed from WRC API. '''
     url='https://webappsdata.wrc.com/srv/wrc/json/api/wrcsrv/byType?t=%22Event%22&maxdepth=1'
@@ -487,7 +517,7 @@ def _getEventMetadata():
     #Play nice
     time.sleep(1)
     
-    eventmeta = requests.get(url).json()
+    eventmeta = requests.get(url,verify=False).json()
     return eventmeta
 
 def getEventMetadata():
@@ -497,8 +527,8 @@ def getEventMetadata():
                                    record_path='_meta',
                                    meta='_id'  ).drop_duplicates().pivot('_id', 'n','v').reset_index()
 
-    eventMetadata['date-finish']=pd.to_datetime(eventMetadata['date-finish'])
-    eventMetadata['date-start']=pd.to_datetime(eventMetadata['date-start'])
+    eventMetadata['date-finish']=pd.to_datetime(eventMetadata['date-finish'], errors='coerce')
+    eventMetadata['date-start']=pd.to_datetime(eventMetadata['date-start'], errors='coerce')
     eventMetadata['year'] = eventMetadata['date-start'].dt.year
     
     return eventMetadata
@@ -507,10 +537,10 @@ def getEventMetadata():
 # TO DO - this all got out of hand; need to tidy up
 def _getRallyMeta(year=YEAR):
     if year not in meta['rallies_metadata']:
-      em= getEventMetadata()
-      em = em[em['year']==year][['name','sas-rallyid', 'sas-eventid', 'kmlfile', 'date-start']].reset_index(drop=True).dropna()
-      em['stub']=em['kmlfile'].apply(lambda x: x.split('_')[0])
-      meta['rallies_metadata'][year] = em.set_index('stub').to_dict(orient='index')
+        em = getEventMetadata()
+        em = em[em['year']==year][['name','sas-rallyid', 'sas-eventid', 'kmlfile', 'date-start']].reset_index(drop=True).dropna()
+        em['stub']=em['kmlfile'].apply(lambda x: x.split('_')[0])
+        meta['rallies_metadata'][year] = em.set_index('stub').to_dict(orient='index')
     return meta['rallies_metadata'][year]
 
 def getRallyIDs(year=YEAR):
@@ -520,9 +550,9 @@ def getRallyIDs(year=YEAR):
 
 def getEventIDs(year=YEAR):
     if year not in meta['rallies']:
-      em = _getRallyMeta(year=year)
-      meta['rallies'][year] = {k:em[k]['sas-eventid'] for k in em}
-      #em[['stub','sas-eventid']].set_index('stub').to_dict()['sas-eventid']
+        em = _getRallyMeta(year=year)
+        meta['rallies'][year] = {k:em[k]['sas-eventid'] for k in em}
+        #em[['stub','sas-eventid']].set_index('stub').to_dict()['sas-eventid']
     return meta['rallies'][year]
 
 
@@ -549,17 +579,19 @@ def nvToDict(nvdict, key='n',val='v', retdict=None):
     return retdict
 #assert nvToDict({'n': "id",'v': "adac-rallye-deutschland"}) == {'id': 'adac-rallye-deutschland'}
 
+import time
+
 def _get_single_json_table(meta, stub):
-    _json = requests.get( stubs['url_base'].format(stub=stubs[stub].format(**meta) ) ).json()
+    _json = requests.get( stubs['url_base'].format(stub=stubs[stub].format(**meta) ,verify=False)+'&dummy={}'.format(int(round(time.time() * 1000))) ).json()
     return json_normalize(_json)
 
 def _get_single_json_table_root(meta, stub):
-    _json = requests.get( stubs['url_root'].format(stub=stubs[stub].format(**meta) ) ).json()
+    _json = requests.get( stubs['url_root'].format(stub=stubs[stub].format(**meta)+'&dummy={}'.format(int(round(time.time() * 1000))) ) ,verify=False).json()
     return json_normalize(_json)
 
 #Datagrab: roster
 def _getRoster(roster_id):
-    roster_json = requests.get(wrcapi.format(roster_id) ).json()
+    roster_json = requests.get(wrcapi.format(roster_id)+'&dummy={}'.format(int(round(time.time() * 1000))) ,verify=False).json()
     roster=json_normalize(roster_json)
     
     aa=json_normalize(roster_json, record_path='_dchildren')
@@ -580,14 +612,21 @@ def getItinerary(meta):
     ''' Get event itinerary. Also updates the stages metadata. '''
     _url = stubs['url_base'].format(stub=stubs['itinerary'].format(**meta) )
     print(_url)
-    headers = {'User-Agent': str(UserAgent().random) }
+    headers = {'User-Agent': str(UserAgent().random), 'referer':'https://www.wrc.com/',
+    'cache-control': 'no-cache' } 
     
     s = requests.Session()
-    s.get('https://www.wrc.com/en/wrc/', headers=headers)
+    s.get('https://www.wrc.com/en/wrc/', headers=headers,verify=False)
     
-    itinerary_json=s.get( _url ).json()
-    print('itinerary_json:',itinerary_json)
-    itinerary_event = {}#json_normalize(itinerary_json).drop('itineraryLegs', axis=1)
+    r = s.get( _url ,verify=False)
+    
+    if r.status_code == 404:
+      print('404 on itinerary')
+      return pd.DataFrame(),pd.DataFrame(),pd.DataFrame(),pd.DataFrame(),pd.DataFrame()
+
+    itinerary_json=r.json()
+    #print('itinerary_json:',itinerary_json)
+    itinerary_event = json_normalize(itinerary_json,max_level=0).drop('itineraryLegs', axis=1)
     
     #meta='eventId' for eventId
     
@@ -615,7 +654,7 @@ def getItinerary(meta):
 
 #Datagrab: startlists
 def get_startlists(meta):
-    startlists_json=requests.get( stubs['url_base'].format(stub=stubs['startlists'].format(**meta) ) ).json()
+    startlists_json=requests.get( stubs['url_base'].format(stub=stubs['startlists'].format(**meta) ) ,verify=False).json()
     ff=[]
     for f in startlists_json:
         if f['manufacturer']['logoFilename'] is None:
@@ -657,10 +696,12 @@ def _single_stage(meta2, stub, stageId, nicely=0.7):
     #play nice
     time.sleep(nicely)
     headers = {'User-Agent': str(UserAgent().random),
-               'referer': 'https://www.wrc.com/en/' }
+               'referer': 'https://www.wrc.com/' }
     
     meta2['stageId']=stageId
-    _json=requests.get( stubs['url_base'].format(stub=stubs[stub].format(**meta2) )).json()
+    _url = stubs['url_base'].format(stub=stubs[stub].format(**meta2) )+'&dummy={}'.format(int(round(time.time() * 1000)))
+    print(_url)
+    _json=requests.get( _url,verify=False).json()
     _df = json_normalize(_json)
     _df['stageId'] = stageId
     return _df
@@ -687,8 +728,10 @@ def _stage_iterator(meta, stub, stage=None):
                     stages.append(meta['_stages'][_stage]['stageId'])
                 elif _stage in meta['stageIds']:
                     stages.append(_stage)
-    else:
+    elif 'stageIds' in meta:
         stages = meta['stageIds']
+    else:
+        stages = []
 
     #Get data for required stages
     #A stage is required if:
@@ -755,8 +798,15 @@ def get_seasonId(year=YEAR):
     return df.loc[df['year']==int(year),'seasonId'].iloc[0]
 
 #Datagrab: seasonDetails
-def get_season_details(seasonId):
-    return requests.get(stubs['url_root'].format(stub=stubs['seasonDetails'].format(seasonId=seasonId) )).json()
+def get_season_details(year):
+    seasons =  requests.get('https://webappsdata.wrc.com/srv/wrc/json/api/wrcsrv/byType?t=%22Season%22&maxdepth=2',verify=False).json()
+    s = [s for s in seasons if s['name']==str(year)]
+    if s:
+        return s[0]
+    else:
+        return {}
+    #data[wt.get_seasonId(year)]
+    #return requests.get(stubs['url_root'].format(stub=stubs['seasonDetails'].format(seasonId=seasonId) )).json()
 
 def get_season_rounds(year=None, seasonId=None):
     if year is None and seasonId is None:
@@ -766,6 +816,7 @@ def get_season_rounds(year=None, seasonId=None):
       seasonId = get_seasonId(YEAR)
 
     if seasonId is not None:
+      # TO DO - lookup season from tear with an obverse of wt.get_seasonId(2019)
       return json_normalize( get_season_details(seasonId)['seasonRounds'] )
     else:
       return pd.DataFrame()
@@ -817,7 +868,7 @@ def championship_tables(champ_class=None, champ_typ=None, year=YEAR):
     #championships = get_season_championships()
     
     # HACK TO DO
-    # pandas v 25 introduces breaking changes on json_normalize  - extracts everything
+    # broken - pandas v 25 introduces breaking changes on json_normalize  - extracts everything
     # Need to set eg: max_level=0
     championships = [{'championshipId':24, 'name': 'FIA World Rally Championship for Drivers',
                       'type':'Person'},
@@ -839,7 +890,7 @@ def championship_tables(champ_class=None, champ_typ=None, year=YEAR):
                'seasonId': seasonId}
         
         championship_url = stubs['url_root'].format(stub=stubs['championship'].format(**meta2) )
-        championship_json=requests.get( championship_url ).json()
+        championship_json=requests.get( championship_url ,verify=False).json()
         if championship_json:
             _championship_lookup = json_normalize(championship_json).drop(['championshipEntries','championshipRounds'], axis=1)
             _championship_lookup['_codeClass'] = championship['name']
@@ -900,22 +951,23 @@ def dbfy(conn, df, table, if_exists='upsert', index=False, clear=False, **kwargs
     #Get columns  
     q="PRAGMA table_info({})".format(table)
     cols = pd.read_sql(q,conn)['name'].tolist()
-    for c in df.columns:
-        if c not in cols:
-            print('Hmmm... column name `{}` appears in data but not {} table def?'.format(c,table ))
-            df.drop(columns=[c], inplace=True)
-
-    if if_exists=='upsert':
-        DB = Database(conn)
-        DB[table].upsert_all(df.to_dict(orient='records'))
-    else:
-        df.to_sql(table,conn,if_exists=if_exists,index=index)
+    if not df.empty:
+        for c in df.columns:
+            if c not in cols:
+                print('Hmmm... column name `{}` appears in data but not {} table def?'.format(c,table ))
+                df.drop(columns=[c], inplace=True)
+    
+        if if_exists=='upsert':
+            DB = Database(conn)
+            DB[table].upsert_all(df.to_dict(orient='records'))
+        else:
+            df.to_sql(table,conn,if_exists=if_exists,index=index)
 
 def save_itinerary(meta, conn):
     itinerary_event, itinerary_legs, itinerary_sections, \
     itinerary_stages, itinerary_controls = getItinerary(meta)
 
-    #dbfy(conn, itinerary_event, 'itinerary_event', if_exists='replace')
+    dbfy(conn, itinerary_event, 'itinerary_event', if_exists='replace')
     dbfy(conn, itinerary_legs, 'itinerary_legs', if_exists='replace')
     dbfy(conn, itinerary_sections, 'itinerary_sections', if_exists='replace')
     dbfy(conn, itinerary_stages, 'itinerary_stages', if_exists='replace')
@@ -934,7 +986,7 @@ def get_kml_slugs(df):
 
 def get_kml_file(kml_slug, outdirname='maps'):
     kmlurl = 'https://webappsdata.wrc.com/web/obc/kml/{}.xml'.format(kml_slug)
-    r=requests.get(kmlurl)  
+    r=requests.get(kmlurl,verify=False)  
     with open("{}/{}.xml".format(outdirname,kml_slug), 'wb') as f:
         f.write(r.content)
 
@@ -1124,7 +1176,7 @@ def get(rally, dbname='wrc19_test1.db', year=YEAR,
     if stage:
       stage = stage if isinstance(stage,list) else [stage]
     else:
-      stage = list(meta['_stages'].keys())
+      stage = list(meta['_stages'].keys()) if '_stages' in meta else []
 
     #We can ignore stages that are ToRun - we can ignore this if we want to forceall
     meta['torun'] = pd.read_sql('SELECT code FROM itinerary_stages WHERE status="ToRun"',conn)['code'].to_list()
